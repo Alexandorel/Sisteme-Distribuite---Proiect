@@ -28,7 +28,35 @@ Fiecare operatie: comanda, pasii prin sistem, rezultatul si erorile tratate.
 
 ## 2. Modelul de date
 
---
+Coordonatorul tine doua tabele in memorie: metadatele fisierelor si lista nodurilor.
+
+### Metadatele unui fisier
+
+| Camp | Tip Java | Exemplu | Stabilit de |
+|---|---|---|---|
+| identificator | `UUID` | `3f2a9c1e-5b7d-4e8a-9c21-7d4e5f6a8b90` | coordonator, la incarcare |
+| nume | `String` | `raport.pdf` | utilizator |
+| dimensiune | `long` (octeti) | `482133` | client |
+| checksum | `String` (SHA-256, hex) | `9f86d081...` | client, verificat de fiecare nod |
+| locatiile copiilor | `List<String>` (ID-uri de nod) | `[n2, n3]` | coordonator, dupa confirmari |
+
+Checksum-ul se calculeaza cu `MessageDigest.getInstance("SHA-256")` din JDK. El
+dovedeste ca fisierul descarcat este identic cu cel incarcat, indiferent de nodul care
+l-a servit.
+
+### Un nod din lista
+
+| Camp | Tip Java | Exemplu |
+|---|---|---|
+| ID nod | `String` | `n2` |
+| adresa si port | `String`, `int` | `192.168.37.102`, `7002` |
+| stare | `enum` | `ACTIV`, `SUSPECT`, `CAZUT` (folosit din Etapa 3) |
+| ultimul semn de viata | `long` (ms) | `System.currentTimeMillis()` la ultimul heartbeat |
+
+### Reconstructia metadatelor
+
+Metadatele traiesc in memoria coordonatorului; daca el cade, dispar odata cu el. De aceea
+fiecare nod poate raporta ce fisiere detine, astfel incat noul coordonator sa reconstruiasca tabela de metadate din rapoartele nodurilor.
 
 ## 3. Cerinte nefunctionale si obiective masurabile
 
