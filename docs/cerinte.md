@@ -60,7 +60,50 @@ fiecare nod poate raporta ce fisiere detine, astfel incat noul coordonator sa re
 
 ## 3. Cerinte nefunctionale si obiective masurabile
 
---
+Fiecare obiectiv are un test care il verifica; valorile sunt alese de echipa si
+justificate mai jos.
+
+| Cerinta | Obiectiv masurabil | Cum se masoara | Etapa |
+|---|---|---|---|
+| Integritate | 0 fisiere cu checksum diferit din 100 de descarcari | script care incarca 100 de fisiere (1 KB - 10 MB, continut aleator), le descarca si compara SHA-256 | 2 |
+| Descoperire | un nod nou apare in lista celorlalti in cel mult 3 s | diferenta dintre timestamp-ul de pornire al nodului si cel de "nod descoperit" din logurile celorlalti | 2 |
+| Detectarea defectelor | un nod oprit cu `kill -9` este marcat CAZUT in cel mult 5 s | diferenta dintre momentul `kill -9` si timestamp-ul "nod cazut" din logurile coordonatorului | 3 |
+| Scalabilitate | debitul total de incarcare cu 4 noduri este de cel putin 1,5 ori cel cu 2 noduri | 10 fisiere de 100 MB incarcate de 2 clienti in paralel; timpul total, in ambele configuratii | 4 |
+| Coordonare | noul coordonator este ales in cel mult 10 s dupa caderea celui vechi | diferenta dintre momentul `kill -9` si timestamp-ul "coordonator nou" din logurile Bully | 5 |
+| Replicare | fiecare fisier are exact 2 copii, pe noduri distincte | `ls` arata 2 noduri distincte per fisier; `sha256sum data/*/*` gaseste fiecare fisier in exact 2 directoare, cu checksum identic | 6 |
+| Disponibilitate | dupa oprirea oricarui nod (inclusiv coordonatorul), 100% din fisiere raman descarcabile | se incarca 20 de fisiere, se opreste un nod cu `kill -9`, se descarca toate si se verifica checksum-ul; se repeta pentru fiecare nod | 7 |
+
+### Justificarea valorilor
+
+- **Integritate - 0 din 100:** orice fisier corupt inseamna pierdere de date, deci singura
+  tinta acceptabila este zero; 100 de fisiere de dimensiuni diferite acopera si cazurile
+  in care fisierul se imparte in mai multe pachete TCP.
+- **Descoperire - 3 s:** nodurile se anunta prin UDP multicast la fiecare 1 s; UDP poate
+  pierde pachete, iar 3 s permit pierderea a doua anunturi consecutive.
+- **Detectare - 5 s:** heartbeat la fiecare 1 s; dupa 3 s fara semn de viata nodul devine
+  SUSPECT, dupa 5 s CAZUT. Un prag mai mic ar marca drept cazut un nod doar incetinit.
+- **Scalabilitate - 1,5x de la 2 la 4 noduri:** comparam cu 2 noduri, nu cu 1, pentru ca
+  sub 2 noduri active `put` este refuzat. Cu 2 noduri fiecare fisier ajunge pe ambele;
+  cu 4, incarcarea se imparte. Tinta nu este 2x, pentru ca la rularea pe aceeasi masina
+  nodurile impart discul si procesorul.
+- **Coordonare - 10 s:** detectarea caderii coordonatorului dureaza pana la 5 s, iar
+  Bully mai are nevoie de cateva runde de mesaje, fiecare cu timeout de cel mult 1-2 s.
+- **Replicare - exact 2 copii:** o copie nu supravietuieste caderii unui nod; trei copii
+  dubleaza costul fara castig in ipoteza de mai jos (cel mult un nod cazut).
+- **Disponibilitate - 100%:** cu 2 copii pe noduri distincte si cel mult un nod cazut,
+  fiecare fisier are mereu o copie accesibila, deci orice valoare sub 100% este un defect.
+
+### Ipoteze de lucru
+
+Obiectivele de mai sus sunt valabile doar in interiorul acestor ipoteze:
+
+- nodurile ruleaza in aceeasi retea locala, unde UDP multicast functioneaza;
+- cel mult un nod este cazut la un moment dat, iar urmatoarea cadere apare abia dupa ce
+  sistemul a detectat-o pe cea anterioara;
+- defectele sunt de tip crash: un nod fie functioneaza corect, fie se opreste; nu trimite
+  date gresite intentionat (nu sunt defecte bizantine);
+- reteaua nu se partitioneaza: daca un nod nu raspunde, este considerat cazut;
+- discul unui nod nu se corupe in timpul rularii; datele scrise raman citibile.
 
 ## 4. Scenariul demonstratiei
 
