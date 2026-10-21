@@ -12,6 +12,9 @@ iar continutul fisierelor circula direct intre client si noduri (ca in HDFS).
 - **`put` pe un nume existent:** este **refuzat cu eroare**; nimic nu se suprascrie,
   pentru a evita pierderea accidentala de date.
 - **Dimensiune maxima per fisier:** **1 GB**. Peste aceasta limita, `put` este refuzat.
+- **Alegerea nodurilor pentru o copie noua:** coordonatorul alege cele 2 noduri ACTIVE
+  cu cele mai putine fisiere stocate; la egalitate, in ordinea ID-ului. Astfel un nod
+  adaugat la rulare (fara fisiere) primeste primele incarcari noi.
 
 ## 1. Cerinte functionale - operatiile
 
@@ -107,7 +110,55 @@ Obiectivele de mai sus sunt valabile doar in interiorul acestor ipoteze:
 
 ## 4. Scenariul demonstratiei
 
---
+Scenariul este testul de acceptanta al proiectului: se ruleaza partial la fiecare etapa
+si complet in saptamana 14. Toate comenzile se dau din radacina repository-ului, pe Linux.
+
+### Pregatire
+
+```bash
+mvn -q package
+rm -rf data/ out/ && mkdir out
+head -c 482133 /dev/urandom > raport.pdf     # fisierul de test
+head -c 100000 /dev/urandom > notite.txt      # al doilea fisier, pentru pasul 4
+```
+
+Terminalele folosite: T1-T4 pentru nodurile n1-n4, T5 pentru client, T6 pentru
+comenzile operatorului (`kill`, `sha256sum`). Comenzile de pornire:
+
+```bash
+# T1
+java -cp target/classes ro.ubm.sd.node.StorageNode --id n1 --port 7001 --dir data/n1 --coordinator
+# T2
+java -cp target/classes ro.ubm.sd.node.StorageNode --id n2 --port 7002 --dir data/n2
+# T3
+java -cp target/classes ro.ubm.sd.node.StorageNode --id n3 --port 7003 --dir data/n3
+# T5
+java -cp target/classes ro.ubm.sd.client.Client --coordinator localhost:7001
+```
+
+In pasii de mai jos, `nX` este unul dintre cele doua noduri afisate de `put raport.pdf`
+la pasul 2 (de exemplu `n2`).
+
+### Pasii
+
+| Pas | Actiunea operatorului | Comanda exacta | Ce trebuie sa se vada | Functioneaza din etapa |
+|---|---|---|---|---|
+| 1 | porneste nodurile n1, n2, n3 in terminale separate, apoi clientul | comenzile din T1, T2, T3, T5 de mai sus; in client: `nodes` | fiecare nod logheaza descoperirea celorlalti doi; `nodes` arata n1, n2, n3 ACTIV, n1 coordonator | 2 |
+| 2 | incarca fisierul din client | T5: `put raport.pdf` | ID-ul fisierului (UUID) si doua noduri distincte care il detin, de ex. `[n2, n3]` | 2 |
+| 3 | descarca fisierul si compara checksum-ul | T5: `get raport.pdf ./out/`<br>T6: `sha256sum raport.pdf out/raport.pdf` | clientul raporteaza checksum verificat; cele doua valori SHA-256 sunt identice | 2 |
+| 4 | porneste nodul n4 fara a opri ceva, apoi incarca un fisier nou | T4: `java -cp target/classes ro.ubm.sd.node.StorageNode --id n4 --port 7004 --dir data/n4`<br>T5: `nodes`, apoi `put notite.txt` | n4 apare in `nodes` ca ACTIV in cel mult 3 s; `put notite.txt` il alege pe n4 (are cele mai putine fisiere) | 4 |
+| 5 | opreste brusc un nod care detine `raport.pdf`, apoi descarca fisierul | T6: `pkill -9 -f "StorageNode --id nX"`<br>T5: `nodes`, apoi `get raport.pdf ./out/` | in cel mult 5 s `nodes` arata nX CAZUT; `get` reuseste din cealalta copie, cu checksum verificat | 3 |
+| 5b | reporneste nodul oprit, ca sa ramana cel mult un nod cazut (ipoteza din sectiunea 3) | in terminalul lui nX: aceeasi comanda de pornire ca la inceput | nX revine ACTIV in `nodes`; pastreaza fisierele din `data/nX` | 3 |
+| 6 | opreste brusc coordonatorul | T6: `pkill -9 -f "StorageNode --id n1"`<br>T5: `nodes` | nodurile ramase logheaza alegerea Bully; in cel mult 10 s apare un coordonator nou (nodul cu ID-ul cel mai mare, n4) | 5 |
+| 7 | listeaza si descarca dupa realegere | T5: `ls`, apoi `get raport.pdf ./out/`<br>T6: `sha256sum raport.pdf out/raport.pdf` | `ls` arata `raport.pdf` si `notite.txt` cu dimensiunea si cele 2 noduri ale fiecaruia (metadate reconstruite din rapoartele nodurilor); checksum-urile sunt identice | 6 |
+
+Observatii:
+
+- La Etapa 1 clientul primeste coordonatorul prin `--coordinator localhost:7001`. De la
+  Etapa 2 il gaseste prin descoperire, deci dupa pasul 6 clientul se conecteaza singur la
+  noul coordonator, fara repornire.
+- La pasul 7, daca n1 detinea o copie, fisierul ramane accesibil din cealalta copie; daca
+  n1 nu detinea copii, ambele copii sunt accesibile.
 
 ## 5. Schita protocolului
 
