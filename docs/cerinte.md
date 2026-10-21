@@ -162,4 +162,49 @@ Observatii:
 
 ## 5. Schita protocolului
 
---
+Aici sunt doar mesajele si continutul lor; formatul exact si implementarea vin in Etapa 2.
+TCP transporta un flux de octeti, deci fiecare mesaj are un **antet** - o linie JSON
+terminata cu `\n` - iar daca are continut de fisier, acesta urmeaza imediat dupa antet,
+ca exact `dimensiune` octeti. Exemplu de antet:
+
+```
+{"tip":"PUT","id":"3f2a9c1e-...","nume":"raport.pdf","dimensiune":482133,"checksum":"9f86d081...","urmator":"n3"}
+```
+
+### Incarcare si descarcare
+
+| Mesaj | De la -> catre | Continut | Raspuns |
+|---|---|---|---|
+| ALLOCATE | client -> coordonator | nume, dimensiune | NODES cu ID-ul fisierului si 2 noduri (ID, adresa, port), sau ERROR (nume existent, fisier > 1 GB, mai putin de 2 noduri active) |
+| PUT | client -> nod | ID, nume, dimensiune, checksum, nodul pentru copie + octetii fisierului | STORED sau ERROR (checksum diferit, eroare de disc, copia esuata) |
+| REPLICATE | nod -> nod | ca PUT, fara nodul urmator | STORED sau ERROR |
+| COMMIT | nod -> coordonator | ID fisier, nume, dimensiune, checksum, nodurile care il detin | OK |
+| LOCATE | client -> coordonator | nume sau ID | LOCATIONS cu metadatele si nodurile (ID, adresa, port), sau NOT_FOUND |
+| GET | client -> nod | ID fisier | antet cu dimensiunea + octetii fisierului, sau NOT_FOUND |
+
+### Listare, stergere, starea sistemului
+
+| Mesaj | De la -> catre | Continut | Raspuns |
+|---|---|---|---|
+| LIST | client -> coordonator | - | FILES: pentru fiecare fisier nume, ID, dimensiune, nodurile care il detin (lista poate fi goala) |
+| DELETE | client -> coordonator | nume | DELETED cu nodurile de pe care s-a sters si cele cu stergere in asteptare, sau NOT_FOUND |
+| REMOVE | coordonator -> nod | ID fisier | REMOVED sau NOT_FOUND (copia lipsea deja; tratat tot ca succes) |
+| STATUS | client -> coordonator | - | NODE_LIST: pentru fiecare nod ID, adresa, port, stare (ACTIV/SUSPECT/CAZUT) si ID-ul coordonatorului |
+
+La `rm`, coordonatorul trimite REMOVE doar nodurilor active si sterge imediat metadatele.
+Pentru nodurile cazute pastreaza ID-ul fisierului intr-o lista de stergeri in asteptare
+si trimite REMOVE cand nodul revine (vezi REPORT).
+
+### Reconstructia metadatelor
+
+| Mesaj | De la -> catre | Continut | Raspuns |
+|---|---|---|---|
+| REPORT | nod -> coordonator | ID-ul nodului si, pentru fiecare fisier detinut: ID, nume, dimensiune, checksum | OK |
+
+Fiecare nod trimite REPORT cand intra in sistem sau cand apare un coordonator nou.
+Coordonatorul reconstruieste tabela de metadate din rapoarte: locatiile unui fisier sunt
+nodurile care il raporteaza. Pentru un fisier aflat in lista de stergeri in asteptare,
+raspunde cu REMOVE in loc sa-l inregistreze.
+
+Mesajele de descoperire (Etapa 2), heartbeat (Etapa 3) si alegere a coordonatorului
+(Etapa 5) se adauga in etapele respective.
