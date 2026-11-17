@@ -21,16 +21,19 @@ Noduri de stocare, cate un terminal pentru fiecare (`--coordinator` marcheaza
 coordonatorul, pana la alegerea prin Bully din Etapa 5):
 
 ```bash
-java -cp target/classes ro.ubm.sd.node.StorageNode --id n1 --port 7001 --dir data/n1 --coordinator
-java -cp target/classes ro.ubm.sd.node.StorageNode --id n2 --port 7002 --dir data/n2
-java -cp target/classes ro.ubm.sd.node.StorageNode --id n3 --port 7003 --dir data/n3
+java -cp target/sd-storage.jar ro.ubm.sd.node.StorageNode --id n1 --port 7001 --dir data/n1 --coordinator
+java -cp target/sd-storage.jar ro.ubm.sd.node.StorageNode --id n2 --port 7002 --dir data/n2
+java -cp target/sd-storage.jar ro.ubm.sd.node.StorageNode --id n3 --port 7003 --dir data/n3
 ```
 
 Client, in alt terminal:
 
 ```bash
-java -cp target/classes ro.ubm.sd.client.Client --coordinator localhost:7001
+java -cp target/sd-storage.jar ro.ubm.sd.client.Client
 ```
+
+`mvn package` produce `target/sd-storage.jar`, care contine si dependentele (Gson);
+`target/classes` singur nu mai este suficient pentru pornire.
 
 Alternativ, toate cele 3 noduri dintr-un singur terminal (scriptul compileaza singur):
 
@@ -38,11 +41,16 @@ Alternativ, toate cele 3 noduri dintr-un singur terminal (scriptul compileaza si
 ./scripts/start-local.sh
 ```
 
-Iesire asteptata la Etapa 1:
+Exemplu (Etapa 2): nodul indicat explicit prin `host:port`:
 
 ```
-[n2] pornit: port 7002, director data/n2, rol: nod de stocare
-[client] coordonator configurat: localhost:7001; comenzi: put, get, ls, rm, nodes, exit
+10:15:33.556 [n2] pornit: port 7002, director data/n2, rol: nod de stocare
+
+[client] comenzi: put <host:port> <fisier>, get <host:port> <nume> <destinatie>, exit
+> put localhost:7002 raport.pdf
+STORED 9f86d081...
+> get localhost:7002 raport.pdf ./out/
+descarcat out/raport.pdf, checksum OK
 ```
 
 ## Documentatie

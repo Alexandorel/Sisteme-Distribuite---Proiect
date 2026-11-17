@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 mvn -q package
 
-CP=target/classes
+CP=target/sd-storage.jar
 run() { java -cp "$CP" ro.ubm.sd.node.StorageNode "$@" & }
 
 run --id n1 --port 7001 --dir data/n1 --coordinator
